@@ -1,0 +1,1 @@
+import{r as e}from"./useRouter-80ermfqe.js";import{F as t}from"./index-4vHzWiV0.js";var n=e();function r(){return(0,n.jsx)(t,{to:`/admin/pengguna`,replace:!0})}export{r as component};

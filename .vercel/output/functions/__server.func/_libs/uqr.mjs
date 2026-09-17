@@ -692,8 +692,8 @@ function makeNumeric(digits) {
 function makeAlphanumeric(text) {
 	if (!isAlphanumeric(text)) throw new RangeError("String contains unencodable characters in alphanumeric mode");
 	const bb = [];
-	let i;
-	for (i = 0; i + 2 <= text.length; i += 2) {
+	let i = 0;
+	for (; i + 2 <= text.length; i += 2) {
 		let temp = ALPHANUMERIC_CHARSET.indexOf(text.charAt(i)) * 45;
 		temp += ALPHANUMERIC_CHARSET.indexOf(text.charAt(i + 1));
 		appendBits(temp, 11, bb);

@@ -1,0 +1,1 @@
+var e=`gsf-staff-token`;function t(){try{return localStorage.getItem(e)??``}catch{return``}}function n(t){try{t?localStorage.setItem(e,t):localStorage.removeItem(e)}catch{}}function r(e=typeof window>`u`?``:t()){let n=e.split(`.`)[1];return n===`admin`||n===`crew`||n===`agent`}export{t as n,n as r,r as t};

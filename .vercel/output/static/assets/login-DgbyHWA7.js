@@ -1,0 +1,1 @@
+import{r as e}from"./useRouter-80ermfqe.js";import{F as t,i as n}from"./index-4vHzWiV0.js";var r=e();function i(){let{ref:e}=n.useSearch();return(0,r.jsx)(t,{to:`/checkout`,search:e?{ref:e}:{}})}export{i as component};

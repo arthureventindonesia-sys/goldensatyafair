@@ -1,8 +1,8 @@
 import { i as __require, o as __toESM, t as __commonJSMin } from "../../_runtime.mjs";
-import { n as require_react } from "../@radix-ui/react-compose-refs+[...].mjs";
-import { r as parseHref } from "../tanstack__history.mjs";
 import { n as require_jsx_runtime } from "../radix-ui__react-context+react.mjs";
-import { u as require_react_dom } from "../@radix-ui/react-dialog+[...].mjs";
+import { n as require_react } from "../@radix-ui/react-compose-refs+[...].mjs";
+import { l as require_react_dom } from "../@radix-ui/react-dialog+[...].mjs";
+import { r as parseHref } from "../tanstack__history.mjs";
 import { PassThrough, Readable } from "node:stream";
 import { ReadableStream as ReadableStream$1 } from "node:stream/web";
 //#region node_modules/@tanstack/router-core/dist/esm/not-found.js
@@ -3785,11 +3785,11 @@ var BaseRootRoute = class extends BaseRoute {
 };
 //#endregion
 //#region node_modules/@tanstack/router-core/dist/esm/ssr/constants.js
+var import_jsx_runtime = require_jsx_runtime();
 var GLOBAL_TSR = "$_TSR";
 var TSR_SCRIPT_BARRIER_ID = "$tsr-stream-barrier";
 //#endregion
 //#region node_modules/@tanstack/react-router/dist/esm/CatchBoundary.js
-var import_jsx_runtime = require_jsx_runtime();
 var CatchBoundary = class extends import_react.Component {
 	constructor(..._args) {
 		super(..._args);
@@ -8894,8 +8894,8 @@ var require_react_dom_server_legacy_node_production = /* @__PURE__ */ __commonJS
 			var prevResumableState = currentResumableState;
 			currentResumableState = request$jscomp$2.resumableState;
 			try {
-				var pingedTasks = request$jscomp$2.pingedTasks, i;
-				for (i = 0; i < pingedTasks.length; i++) {
+				var pingedTasks = request$jscomp$2.pingedTasks, i = 0;
+				for (; i < pingedTasks.length; i++) {
 					var task = pingedTasks[i], request = request$jscomp$2, segment = task.blockedSegment;
 					if (null === segment) {
 						var request$jscomp$0 = request;
@@ -12967,8 +12967,8 @@ var require_react_dom_server_node_production = /* @__PURE__ */ __commonJSMin(((e
 			var prevResumableState = currentResumableState;
 			currentResumableState = request$jscomp$2.resumableState;
 			try {
-				var pingedTasks = request$jscomp$2.pingedTasks, i;
-				for (i = 0; i < pingedTasks.length; i++) {
+				var pingedTasks = request$jscomp$2.pingedTasks, i = 0;
+				for (; i < pingedTasks.length; i++) {
 					var task = pingedTasks[i], request = request$jscomp$2, segment = task.blockedSegment;
 					if (null === segment) {
 						var request$jscomp$0 = request;

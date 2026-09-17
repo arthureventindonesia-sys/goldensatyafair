@@ -12,9 +12,9 @@ var install_page_default = "<!DOCTYPE html>\n<html lang=\"en\" class=\"device-de
 //#endregion
 //#region \0virtual:grok-og-identity
 var grokOgIdentity = { "site": {
-	"title": "TULUS BUMIAYU",
+	"title": "GOLDEN SATYA FAIR",
 	"card": "custom",
-	"description": "Konser Tulus Bumiayu 2026 — tiket VIP dan Festival di Lapangan Asri.",
+	"description": "Malam emas di Bumiayu. Tiket VIP dan Festival di Perumahan Golden Star Lumina, November 2026.",
 	"image": "/og.jpg"
 } };
 //#endregion

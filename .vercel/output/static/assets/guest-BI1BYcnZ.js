@@ -1,0 +1,1 @@
+var e=`gsf-guest`;function t(){if(typeof window>`u`)return null;try{let t=localStorage.getItem(e);if(!t)return null;let n=JSON.parse(t);return{name:String(n.name??``),address:String(n.address??``),email:String(n.email??``),whatsapp:String(n.whatsapp??``)}}catch{return null}}function n(t){if(typeof window<`u`)try{localStorage.setItem(e,JSON.stringify(t))}catch{}}export{n,t};
