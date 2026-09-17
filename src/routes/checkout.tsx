@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -7,14 +7,13 @@ import { Label } from "@/components/ui/label";
 import { CopyNominalIcon } from "@/components/copy-nominal";
 import { PaymentDialog } from "@/components/payment-dialog";
 import { QtyStepper } from "@/components/qty-stepper";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { EVENT, PER_USER_LIMIT, TICKET_COPY, TICKET_IDS, isTicketTypeId, type TicketTypeId } from "@/lib/event";
 import { formatIdr, isValidAddress, isValidEmail, isValidName, isValidWhatsapp, uniqueCodeFromPhone } from "@/lib/format";
+import { readGuestCheckout, writeGuestCheckout } from "@/lib/guest";
+import { normalizeReferral } from "@/lib/referral";
 import { isStaffSession, readStaffToken } from "@/lib/staff-session";
 import {
   createOrder,
-  getBuyerProfile,
   getCheckoutState,
   type CatalogStage,
   type CatalogTicket,
@@ -25,17 +24,18 @@ import { cn } from "@/lib/utils";
 const emptyQty = (): Record<TicketTypeId, number> => ({ vvip: 0, vip: 0, festival: 0 });
 
 export const Route = createFileRoute("/checkout")({
-  validateSearch: (s: Record<string, unknown>): { type?: TicketTypeId } => {
+  validateSearch: (s: Record<string, unknown>): { type?: TicketTypeId; ref?: string } => {
     const type = isTicketTypeId(String(s.type ?? "")) ? (s.type as TicketTypeId) : undefined;
-    return { ...(type ? { type } : {}) };
+    const ref = normalizeReferral(String(s.ref ?? ""));
+    return { ...(type ? { type } : {}), ...(ref ? { ref } : {}) };
   },
   component: CheckoutPage,
 });
 
 function CheckoutPage() {
-  const { type } = Route.useSearch();
+  const { type, ref } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const { user, isPending } = useCurrentUserState();
+  const lockedRef = ref || "";
   const [qty, setQty] = useState<Record<TicketTypeId, number>>({
     ...emptyQty(),
     ...(type ? { [type]: 1 } : {}),
@@ -45,7 +45,7 @@ function CheckoutPage() {
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [agree, setAgree] = useState(false);
-  const [referral, setReferral] = useState("");
+  const [referral, setReferral] = useState(lockedRef);
   const [catalog, setCatalog] = useState<CatalogTicket[] | null>(null);
   const [stage, setStage] = useState<CatalogStage | null>(null);
   const [held, setHeld] = useState<Record<TicketTypeId, number>>(emptyQty());
@@ -57,21 +57,20 @@ function CheckoutPage() {
 
   useEffect(() => {
     setStaffBuyer(isStaffSession());
+    const saved = readGuestCheckout();
+    if (!saved) return;
+    if (saved.name) setFullName(saved.name);
+    if (saved.address) setAddress(saved.address);
+    if (saved.email) setEmail(saved.email);
+    if (saved.whatsapp) setWhatsapp(saved.whatsapp);
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-    setEmail((prev) => prev || user.primaryEmail || "");
-    setFullName((prev) => prev || user.displayName || "");
-    void getBuyerProfile()
-      .then((profile) => {
-        if (!profile) return;
-        setEmail((prev) => prev || profile.email);
-        setWhatsapp((prev) => prev || profile.whatsapp);
-        if (profile.referralCode) setReferral(profile.referralCode);
-      })
-      .catch(() => undefined);
-    void getCheckoutState({ data: { token: readStaffToken() } })
+    if (lockedRef) setReferral(lockedRef);
+  }, [lockedRef]);
+
+  useEffect(() => {
+    void getCheckoutState({ data: { token: readStaffToken(), whatsapp: "" } })
       .then((data) => {
         setCatalog(data.tickets);
         setStage(data.stage);
@@ -81,7 +80,21 @@ function CheckoutPage() {
         toast.error(e instanceof Error ? e.message : "Gagal memuat tiket.");
       })
       .finally(() => setLoading(false));
-  }, [user]);
+  }, []);
+
+  useEffect(() => {
+    if (!isValidWhatsapp(whatsapp)) return;
+    const timer = window.setTimeout(() => {
+      void getCheckoutState({ data: { token: readStaffToken(), whatsapp } })
+        .then((data) => {
+          setHeld({ ...emptyQty(), ...data.held });
+        })
+        .catch(() => {
+          /* keep last held */
+        });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [whatsapp]);
 
   const visibleIds = (catalog ?? []).map((t) => t.id);
   const maxQty: Record<TicketTypeId, number> = {
@@ -112,32 +125,19 @@ function CheckoutPage() {
   const payable = total + uniqueCode;
   const totalQty = qty.vvip + qty.vip + qty.festival;
 
-  if (isPending) {
-    return (
-      <main className="mx-auto w-full max-w-5xl px-5 py-12 sm:px-8">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="mt-8 h-80 w-full" />
-      </main>
-    );
-  }
-
   if (staffBuyer) {
     return (
       <main className="mx-auto w-full max-w-5xl px-5 py-12 sm:px-8">
         <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Checkout</p>
         <h1 className="mt-3 font-display text-4xl italic tracking-tight">Tidak bisa membeli</h1>
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          Akun admin, crew, dan agent hanya untuk mengelola penjualan. Gunakan akun pembeli terpisah untuk beli tiket.
+          Akun admin, crew, dan agent hanya untuk mengelola penjualan. Buka situs tanpa login staf untuk beli tiket.
         </p>
         <Link to="/admin" className="mt-6 inline-flex text-sm underline-offset-4 hover:underline">
           Ke panel staf
         </Link>
       </main>
     );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" search={{ redirect: "/checkout" }} />;
   }
 
   async function pay() {
@@ -174,15 +174,17 @@ function CheckoutPage() {
           address,
           email,
           whatsapp,
+          referral,
           token: readStaffToken(),
         },
       });
+      writeGuestCheckout({ name: fullName, address, email, whatsapp });
       setSession(next);
       setPayOpen(true);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Gagal membuat pesanan.";
       if (message === "Unauthorized") {
-        toast.error("Sesi berakhir. Masuk kembali.");
+        toast.error("Sesi staf tidak bisa membeli tiket.");
         return;
       }
       toast.error(message);
@@ -208,6 +210,10 @@ function CheckoutPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           {EVENT.name} · {EVENT.venue}
           {stage ? ` · ${stage.name}` : ""}
+        </p>
+        <p className="mt-2 max-w-md text-sm text-muted-foreground">
+          Tidak perlu membuat akun. Isi data di bawah, bayar QRIS, lalu cek e-ticket di Tiket saya dengan email dan
+          WhatsApp yang sama.
         </p>
         {!loading && !stage ? (
           <p className="mt-6 text-sm text-muted-foreground">Penjualan tiket sedang ditutup.</p>
@@ -238,7 +244,7 @@ function CheckoutPage() {
                     {item ? formatIdr(item.priceIdr) : "—"}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {cap <= 0 ? "Tidak bisa dibeli saat ini." : `Maks. ${PER_USER_LIMIT} / akun · bisa beli ${cap}`}
+                    {cap <= 0 ? "Tidak bisa dibeli saat ini." : `Maks. ${PER_USER_LIMIT} / nomor WA · bisa beli ${cap}`}
                   </p>
                 </button>
                 <QtyStepper
@@ -290,23 +296,29 @@ function CheckoutPage() {
             <p className="text-xs text-muted-foreground">Dipakai pada e-ticket dan pintu masuk.</p>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="email">Email e-ticket</Label>
+            <Label htmlFor="email">
+              Email e-ticket <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="email"
               type="email"
               autoComplete="email"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="nama@email.com"
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="wa">Nomor WhatsApp</Label>
+            <Label htmlFor="wa">
+              Nomor WhatsApp <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="wa"
               type="tel"
               inputMode="tel"
               autoComplete="tel"
+              required
               value={whatsapp}
               onChange={(e) => setWhatsapp(e.target.value)}
               placeholder="0812 3456 7890"
@@ -315,11 +327,27 @@ function CheckoutPage() {
               Format Indonesia, diawali 08 atau +62. Tiga digit terakhir jadi kode unik nominal.
             </p>
           </div>
-          {referral ? (
-            <p className="text-sm text-muted-foreground">
-              Kode referal akun: <span className="font-mono text-foreground">{referral}</span>
+          <div className="grid gap-2">
+            <Label htmlFor="referral">Kode referal agent</Label>
+            <Input
+              id="referral"
+              autoComplete="off"
+              placeholder="opsional"
+              value={referral}
+              readOnly={Boolean(lockedRef)}
+              disabled={Boolean(lockedRef)}
+              onChange={(e) => {
+                if (lockedRef) return;
+                setReferral(e.target.value);
+              }}
+              className={lockedRef ? "opacity-80" : undefined}
+            />
+            <p className="text-xs text-muted-foreground">
+              {lockedRef
+                ? "Terisi otomatis dari tautan agent dan tidak bisa diubah."
+                : "Isi jika beli lewat agent. Kosongkan jika tidak ada."}
             </p>
-          ) : null}
+          </div>
           <label className="flex items-start gap-3 text-sm text-muted-foreground">
             <input
               type="checkbox"

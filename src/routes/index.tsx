@@ -99,7 +99,7 @@ function Tickets({ tickets, stage }: { tickets: CatalogTicket[] | null; stage: C
       <h2 className="mt-3 font-display text-4xl italic tracking-tight sm:text-5xl">Pilih malammu</h2>
       <p className="mt-4 max-w-xl text-muted-foreground">
         {stage
-          ? `${stage.name}. Maksimal 5 tiket per jenis per akun, bisa dibeli sekaligus dalam satu checkout.`
+          ? `${stage.name}. Tanpa daftar akun. Maksimal 5 tiket per jenis per nomor WhatsApp, bisa dibeli sekaligus dalam satu checkout.`
           : "Penjualan tiket sedang ditutup. Nantikan tahap berikutnya."}
       </p>
       <div className={cn("mt-12 grid gap-6", show.length > 2 ? "lg:grid-cols-3" : "lg:grid-cols-2")}>
@@ -154,7 +154,7 @@ function TicketCard({
             </li>
           ))}
         </ul>
-        <p className="text-xs text-muted-foreground">Maks. 5 tiket / akun</p>
+        <p className="text-xs text-muted-foreground">Maks. 5 tiket / jenis per nomor WhatsApp</p>
         {staff ? (
           <Link to="/admin" className={cn(buttonVariants(), "relative z-10 mt-auto w-full")}>
             Akun staf tidak bisa membeli

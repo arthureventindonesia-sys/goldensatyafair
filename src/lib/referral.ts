@@ -8,7 +8,7 @@ export function normalizeReferral(value: string) {
 
 export function agentSignupPath(code: string) {
   const ref = normalizeReferral(code);
-  return `/login?ref=${encodeURIComponent(ref)}`;
+  return `/checkout?ref=${encodeURIComponent(ref)}`;
 }
 
 export function inLivePreviewFrame() {

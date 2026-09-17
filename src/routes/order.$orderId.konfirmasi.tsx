@@ -5,7 +5,6 @@ import { CopyNominalButton } from "@/components/copy-nominal";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { PAYMENT_REVIEW_NOTICE } from "@/lib/event";
 import { formatIdr, formatUniqueCode } from "@/lib/format";
 import { getOrder, uploadPaymentProof, type OrderRecord } from "@/lib/tickets/server";
@@ -29,7 +28,6 @@ function fileToBase64(file: File) {
 
 function ConfirmPaymentPage() {
   const { orderId } = Route.useParams();
-  const { user, isPending } = useCurrentUserState();
   const [order, setOrder] = useState<OrderRecord | null>(null);
   const [missing, setMissing] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -38,14 +36,13 @@ function ConfirmPaymentPage() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
     void getOrder({ data: { orderId } })
       .then((data) => {
         setOrder(data.order);
         if (data.order.status === "submitted" || data.order.hasProof) setDone(true);
       })
       .catch(() => setMissing(true));
-  }, [user, orderId]);
+  }, [orderId]);
 
   useEffect(() => {
     if (!file) {
@@ -57,16 +54,12 @@ function ConfirmPaymentPage() {
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  if (isPending) {
+  if (!order && !missing) {
     return (
       <main className="mx-auto w-full max-w-xl px-5 py-12 sm:px-8">
         <Skeleton className="h-64 w-full" />
       </main>
     );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" search={{ redirect: `/order/${orderId}/konfirmasi` }} />;
   }
 
   if (missing) {

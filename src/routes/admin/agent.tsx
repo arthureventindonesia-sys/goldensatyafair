@@ -27,7 +27,7 @@ function AdminAgent() {
         <h2 className="font-display text-2xl italic">Agent</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {isAgent
-            ? `Pembeli yang mengisi kode referal ${dash.referralCode || dash.username} saat daftar.`
+            ? `Pembeli yang mengisi kode referal ${dash.referralCode || dash.username} saat checkout.`
             : "Pembeli yang transaksi memakai kode referal agent."}
         </p>
         {isAgent ? (

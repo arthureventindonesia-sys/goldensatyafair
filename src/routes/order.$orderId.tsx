@@ -1,11 +1,10 @@
-import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CopyNominalButton } from "@/components/copy-nominal";
 import { ETicket } from "@/components/e-ticket";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { PAYMENT_REVIEW_NOTICE } from "@/lib/event";
 import { formatIdr, formatUniqueCode } from "@/lib/format";
 import {
@@ -18,13 +17,11 @@ export const Route = createFileRoute("/order/$orderId")({ component: OrderPage }
 
 function OrderPage() {
   const { orderId } = Route.useParams();
-  const { user, isPending } = useCurrentUserState();
   const [order, setOrder] = useState<OrderRecord | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
     let cancelled = false;
     let timer: number | undefined;
     const load = () =>
@@ -51,19 +48,7 @@ function OrderPage() {
       cancelled = true;
       if (timer !== undefined) window.clearInterval(timer);
     };
-  }, [user, orderId]);
-
-  if (isPending) {
-    return (
-      <main className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-8">
-        <Skeleton className="h-40 w-full" />
-      </main>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" search={{ redirect: `/order/${orderId}` }} />;
-  }
+  }, [orderId]);
 
   if (missing) {
     return (

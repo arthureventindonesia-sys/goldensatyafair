@@ -1,41 +1,34 @@
-import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Printer } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ETicket } from "@/components/e-ticket";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getTicketByCode, type TicketRecord } from "@/lib/tickets/server";
 
 export const Route = createFileRoute("/tiket/$code")({ component: TicketDetailPage });
 
 function TicketDetailPage() {
   const { code } = Route.useParams();
-  const { user, isPending } = useCurrentUserState();
   const [ticket, setTicket] = useState<TicketRecord | null>(null);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
     void getTicketByCode({ data: { code } })
       .then(setTicket)
       .catch((e: unknown) => {
         setMissing(true);
         toast.error(e instanceof Error ? e.message : "Tiket tidak ditemukan.");
       });
-  }, [user, code]);
+  }, [code]);
 
-  if (isPending) {
+  if (!ticket && !missing) {
     return (
       <main className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-8">
         <Skeleton className="h-64 w-full" />
       </main>
     );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" search={{ redirect: `/tiket/${code}` }} />;
   }
 
   if (missing) {

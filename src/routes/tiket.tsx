@@ -1,53 +1,110 @@
-import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ETicket } from "@/components/e-ticket";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { formatIdr } from "@/lib/format";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { formatIdr, isValidEmail, isValidWhatsapp } from "@/lib/format";
+import { readGuestCheckout } from "@/lib/guest";
 import { getMyTickets, type OrderRecord, type TicketRecord } from "@/lib/tickets/server";
 
 export const Route = createFileRoute("/tiket")({ component: MyTicketsPage });
 
 function MyTicketsPage() {
-  const { user, isPending } = useCurrentUserState();
+  const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [busy, setBusy] = useState(false);
   const [tickets, setTickets] = useState<TicketRecord[] | null>(null);
   const [pending, setPending] = useState<OrderRecord[]>([]);
+  const [lookedUp, setLookedUp] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    void getMyTickets()
+    const saved = readGuestCheckout();
+    if (!saved) return;
+    if (saved.email) setEmail(saved.email);
+    if (saved.whatsapp) setWhatsapp(saved.whatsapp);
+    if (!isValidEmail(saved.email) || !isValidWhatsapp(saved.whatsapp)) return;
+    setBusy(true);
+    void getMyTickets({ data: { email: saved.email, whatsapp: saved.whatsapp } })
       .then((data) => {
         setTickets(data.tickets);
         setPending(data.pending);
+        setLookedUp(true);
       })
-      .catch((e: unknown) => {
-        toast.error(e instanceof Error ? e.message : "Gagal memuat tiket.");
-        setTickets([]);
-      });
-  }, [user]);
+      .catch(() => {
+        /* stay on the lookup form */
+      })
+      .finally(() => setBusy(false));
+  }, []);
 
-  if (isPending) {
-    return (
-      <main className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-8">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="mt-8 h-56 w-full" />
-      </main>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" search={{ redirect: "/tiket" }} />;
+  async function lookup() {
+    if (!isValidEmail(email)) {
+      toast.error("Email tidak valid.");
+      return;
+    }
+    if (!isValidWhatsapp(whatsapp)) {
+      toast.error("Nomor WhatsApp Indonesia tidak valid.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await getMyTickets({ data: { email, whatsapp } });
+      setTickets(data.tickets);
+      setPending(data.pending);
+      setLookedUp(true);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Gagal memuat tiket.");
+      setTickets([]);
+      setPending([]);
+      setLookedUp(true);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-8">
-      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Akun</p>
+      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Tiket</p>
       <h1 className="mt-3 font-display text-4xl italic tracking-tight">Tiket saya</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        E-ticket lunas. Tunjukkan QR di pintu masuk.
+        Cek tiket dengan email dan WhatsApp yang dipakai saat checkout. Tidak perlu membuat akun.
       </p>
+
+      <form
+        className="mt-8 grid gap-4 rounded-xl border border-border bg-card p-5 sm:grid-cols-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void lookup();
+        }}
+      >
+        <div className="grid gap-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="wa">Nomor WhatsApp</Label>
+          <Input
+            id="wa"
+            type="tel"
+            required
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            placeholder="08xxxxxxxxxx"
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <Button type="submit" disabled={busy}>
+            {busy ? "Mencari…" : "Lihat tiket"}
+          </Button>
+        </div>
+      </form>
 
       {pending.length > 0 ? (
         <div className="mt-8 rounded-lg border border-border bg-card p-5">
@@ -77,33 +134,12 @@ function MyTicketsPage() {
         </div>
       ) : null}
 
-      {tickets === null ? (
-        <Skeleton className="mt-8 h-56 w-full" />
-      ) : tickets.length === 0 ? (
-        <div className="mt-12 rounded-xl border border-border px-6 py-16 text-center">
-          <p className="font-display text-2xl italic">Belum ada tiket</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            VIP dan Festival masih tersedia di halaman utama.
-          </p>
-          <Button asChild className="mt-6">
-            <a href="/#tiket">
-              Lihat tiket
-            </a>
-          </Button>
-        </div>
+      {tickets === null ? null : tickets.length === 0 && lookedUp ? (
+        <p className="mt-8 text-sm text-muted-foreground">Belum ada tiket lunas untuk data ini.</p>
       ) : (
         <div className="mt-8 grid gap-6">
-          {tickets.map((ticket) => (
-            <div key={ticket.id} className="grid gap-3">
-              <ETicket ticket={ticket} />
-              <div className="flex flex-wrap gap-3 no-print">
-                <Button asChild variant="outline" size="sm">
-                  <Link to="/tiket/$code" params={{ code: ticket.code }}>
-                    Detail
-                  </Link>
-                </Button>
-              </div>
-            </div>
+          {tickets?.map((ticket) => (
+            <ETicket key={ticket.id} ticket={ticket} />
           ))}
         </div>
       )}

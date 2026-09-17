@@ -18,7 +18,7 @@ function AdminHome() {
         <h2 className="font-display text-2xl italic">Ringkasan</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {isAgent
-            ? "Transaksi dari pembeli yang mengisi kode referal Anda saat daftar."
+            ? "Transaksi dari pembeli yang mengisi kode referal Anda saat checkout."
             : "Tiket terjual dan status pembayaran."}
         </p>
         {isAgent ? (

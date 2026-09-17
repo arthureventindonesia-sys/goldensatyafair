@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware } from "@/lib/auth/middleware";
 import {
   EVENT,
   PER_USER_LIMIT,
@@ -138,6 +137,27 @@ type Sql = Awaited<ReturnType<typeof import("@/lib/db").getSql>>;
 function asInt(value: unknown) {
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function guestBuyerId(whatsapp: string) {
+  return `guest:${normalizeWhatsapp(whatsapp)}`;
+}
+
+async function resolveAgentReferral(sql: Sql, requested: string) {
+  const ref = String(requested ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "")
+    .slice(0, 24);
+  if (!ref) return null;
+  const agents = await sql<{ username: string; referral_code: string | null }>`
+    select username, referral_code from staff
+    where role = 'agent'
+      and (lower(username) = ${ref} or lower(coalesce(referral_code, '')) = ${ref})
+    limit 1
+  `;
+  if (!agents[0]) throw new Error("Kode referal tidak valid.");
+  return String(agents[0].referral_code || agents[0].username).toLowerCase();
 }
 
 type StageRow = {
@@ -490,25 +510,23 @@ export const getCatalog = createServerFn({ method: "GET" }).handler(async () => 
 });
 
 export const getCheckoutState = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator((input: unknown) => ({ token: String((input as { token?: string } | null)?.token ?? "") }))
-  .handler(async ({ context, data }) => {
+  .validator((input: unknown) => ({
+    token: String((input as { token?: string } | null)?.token ?? ""),
+    whatsapp: String((input as { whatsapp?: string } | null)?.whatsapp ?? ""),
+  }))
+  .handler(async ({ data }) => {
     try {
     const { assertNotStaffBuyer } = await import("@/lib/admin.server");
     assertNotStaffBuyer(data.token);
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     await expireStale(sql);
-    await sql`
-      update orders
-      set status = 'cancelled'
-      where user_id = ${context.userId} and status = 'pending'
-    `;
     const catalog = await loadCatalog(sql);
+    const buyerId = isValidWhatsapp(data.whatsapp) ? guestBuyerId(data.whatsapp) : "";
     const held = {
-      vvip: await userHeld(sql, context.userId, "vvip"),
-      vip: await userHeld(sql, context.userId, "vip"),
-      festival: await userHeld(sql, context.userId, "festival"),
+      vvip: buyerId ? await userHeld(sql, buyerId, "vvip") : 0,
+      vip: buyerId ? await userHeld(sql, buyerId, "vip") : 0,
+      festival: buyerId ? await userHeld(sql, buyerId, "festival") : 0,
     } satisfies Record<TicketTypeId, number>;
     return { ...catalog, held };
     } catch (e: unknown) {
@@ -518,7 +536,6 @@ export const getCheckoutState = createServerFn({ method: "POST" })
   });
 
 export const createOrder = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
   .validator((input: unknown) => {
     const data = input as {
       items?: { ticketTypeId?: string; quantity?: number }[];
@@ -560,26 +577,33 @@ export const createOrder = createServerFn({ method: "POST" })
     if (!isValidAddress(address)) throw new Error("Alamat wajib diisi (minimal 8 karakter).");
     if (!isValidEmail(email)) throw new Error("Email tidak valid.");
     if (!isValidWhatsapp(whatsapp)) throw new Error("Nomor WhatsApp Indonesia tidak valid.");
+    const referral = String(data.referral ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "")
+      .slice(0, 24);
     return {
       items,
       email,
       whatsapp: normalizeWhatsapp(whatsapp),
       name,
       address,
+      referral,
       token: String(data.token ?? ""),
     };
   })
-  .handler(async ({ context, data }): Promise<PaymentSession> => {
+  .handler(async ({ data }): Promise<PaymentSession> => {
     const { assertNotStaffBuyer } = await import("@/lib/admin.server");
     assertNotStaffBuyer(data.token);
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     await expireStale(sql);
+    const buyerId = guestBuyerId(data.whatsapp);
 
     await sql`
       update orders
       set status = 'cancelled'
-      where user_id = ${context.userId} and status = 'pending'
+      where user_id = ${buyerId} and status = 'pending'
     `;
 
     const lines: OrderLine[] = [];
@@ -599,13 +623,13 @@ export const createOrder = createServerFn({ method: "POST" })
             : `Sisa tiket ${TICKET_COPY[item.ticketTypeId].name} tidak cukup. Kurangi jumlah.`,
         );
       }
-      const held = await userHeld(sql, context.userId, item.ticketTypeId);
+      const held = await userHeld(sql, buyerId, item.ticketTypeId);
       if (held + item.quantity > PER_USER_LIMIT) {
         const left = Math.max(0, PER_USER_LIMIT - held);
         throw new Error(
           left === 0
-            ? `Batas ${PER_USER_LIMIT} tiket ${TICKET_COPY[item.ticketTypeId].name} per akun sudah terpenuhi.`
-            : `Kamu masih bisa membeli ${left} tiket ${TICKET_COPY[item.ticketTypeId].name}.`,
+            ? `Batas ${PER_USER_LIMIT} tiket ${TICKET_COPY[item.ticketTypeId].name} per nomor WhatsApp sudah terpenuhi.`
+            : `Nomor ini masih bisa membeli ${left} tiket ${TICKET_COPY[item.ticketTypeId].name}.`,
         );
       }
       lines.push({
@@ -623,22 +647,32 @@ export const createOrder = createServerFn({ method: "POST" })
     const orderId = newOrderId();
     let referral: string | null = null;
     try {
+      referral = await resolveAgentReferral(sql, data.referral);
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message === "Kode referal tidak valid.") throw e;
+      referral = null;
+    }
+    try {
       await ensureBuyerProfiles(sql);
-      const profile = await sql<{ referral_code: string | null }>`
-        select referral_code from buyer_profiles where user_id = ${context.userId} limit 1
+      const existing = await sql<{ user_id: string }>`
+        select user_id from buyer_profiles where user_id = ${buyerId} limit 1
       `;
-      const requested = String(profile[0]?.referral_code ?? "");
-      if (requested) {
-        const agents = await sql<{ username: string; referral_code: string | null }>`
-          select username, referral_code from staff
-          where role = 'agent'
-            and (lower(username) = ${requested} or lower(coalesce(referral_code, '')) = ${requested})
-          limit 1
+      if (existing[0]) {
+        await sql`
+          update buyer_profiles
+          set email = ${data.email},
+              whatsapp = ${data.whatsapp},
+              referral_code = coalesce(referral_code, ${referral})
+          where user_id = ${buyerId}
         `;
-        if (agents[0]) referral = String(agents[0].referral_code || agents[0].username).toLowerCase();
+      } else {
+        await sql`
+          insert into buyer_profiles (user_id, email, whatsapp, referral_code)
+          values (${buyerId}, ${data.email}, ${data.whatsapp}, ${referral})
+        `;
       }
     } catch {
-      referral = null;
+      /* profile is best-effort for admin lists */
     }
 
     await sql`
@@ -646,7 +680,7 @@ export const createOrder = createServerFn({ method: "POST" })
         id, user_id, ticket_type_id, quantity, gross_amount, email, whatsapp, holder_name, holder_address, status, payment_type, midtrans_token, referral_code, stage_id
       ) values (
         ${orderId},
-        ${context.userId},
+        ${buyerId},
         ${summary.ticketTypeId},
         ${summary.quantity},
         ${grossAmount},
@@ -688,7 +722,6 @@ export const createOrder = createServerFn({ method: "POST" })
   });
 
 export const confirmDemoPayment = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
   .validator((input: unknown) => {
     const data = input as { orderId?: string; paymentType?: string };
     const orderId = String(data.orderId ?? "").trim();
@@ -698,11 +731,11 @@ export const confirmDemoPayment = createServerFn({ method: "POST" })
       paymentType: String(data.paymentType ?? "qris").slice(0, 40),
     };
   })
-  .handler(async ({ context, data }) => {
+  .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     const rows = await sql<OrderRow>`
-      select * from orders where id = ${data.orderId} and user_id = ${context.userId} limit 1
+      select * from orders where id = ${data.orderId} limit 1
     `;
     const order = rows[0];
     if (!order) throw new Error("Pesanan tidak ditemukan.");
@@ -722,20 +755,19 @@ export const confirmDemoPayment = createServerFn({ method: "POST" })
   });
 
 export const confirmMidtransPayment = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
   .validator((input: unknown) => {
     const orderId = String((input as { orderId?: string }).orderId ?? "").trim();
     if (!orderId) throw new Error("Pesanan tidak ditemukan.");
     return { orderId };
   })
-  .handler(async ({ context, data }) => {
+  .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db");
     const { fetchMidtransStatus, isPaidStatus, isMidtransConfigured } = await import(
       "@/lib/midtrans.server"
     );
     const sql = await getSql();
     const rows = await sql<OrderRow>`
-      select * from orders where id = ${data.orderId} and user_id = ${context.userId} limit 1
+      select * from orders where id = ${data.orderId} limit 1
     `;
     const order = rows[0];
     if (!order) throw new Error("Pesanan tidak ditemukan.");
@@ -760,18 +792,27 @@ export const confirmMidtransPayment = createServerFn({ method: "POST" })
     return { order: await mapOrderFull(sql, paid), tickets: tickets.map(mapTicket) };
   });
 
-export const getMyTickets = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+export const getMyTickets = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const data = input as { email?: string; whatsapp?: string };
+    const email = String(data.email ?? "").trim().toLowerCase();
+    const whatsapp = String(data.whatsapp ?? "").trim();
+    if (!isValidEmail(email)) throw new Error("Email tidak valid.");
+    if (!isValidWhatsapp(whatsapp)) throw new Error("Nomor WhatsApp Indonesia tidak valid.");
+    return { email, whatsapp: normalizeWhatsapp(whatsapp) };
+  })
+  .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     await expireStale(sql);
     const tickets = await sql<TicketRow>`
-      select * from tickets where user_id = ${context.userId} order by created_at desc
+      select * from tickets
+      where holder_email = ${data.email} and holder_whatsapp = ${data.whatsapp}
+      order by created_at desc
     `;
     const pending = await sql<OrderRow>`
       select * from orders
-      where user_id = ${context.userId} and status in ('pending', 'submitted')
+      where email = ${data.email} and whatsapp = ${data.whatsapp} and status in ('pending', 'submitted')
       order by created_at desc
     `;
     return {
@@ -781,23 +822,22 @@ export const getMyTickets = createServerFn({ method: "GET" })
   });
 
 export const getOrder = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
   .validator((input: unknown) => {
     const orderId = String((input as { orderId?: string }).orderId ?? "").trim();
     if (!orderId) throw new Error("Pesanan tidak ditemukan.");
     return { orderId };
   })
-  .handler(async ({ context, data }) => {
+  .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     await expireStale(sql);
     const rows = await sql<OrderRow>`
-      select * from orders where id = ${data.orderId} and user_id = ${context.userId} limit 1
+      select * from orders where id = ${data.orderId} limit 1
     `;
     const order = rows[0];
     if (!order) throw new Error("Pesanan tidak ditemukan.");
     const tickets = await sql<TicketRow>`
-      select * from tickets where order_id = ${order.id} and user_id = ${context.userId} order by created_at
+      select * from tickets where order_id = ${order.id} order by created_at
     `;
     return { order: await mapOrderFull(sql, order), tickets: tickets.map(mapTicket) };
   });
@@ -806,7 +846,6 @@ const PROOF_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/jpg"
 const PROOF_MAX_CHARS = 5_500_000;
 
 export const uploadPaymentProof = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
   .validator((input: unknown) => {
     const data = input as {
       orderId?: string;
@@ -824,12 +863,12 @@ export const uploadPaymentProof = createServerFn({ method: "POST" })
     if (payload.length > PROOF_MAX_CHARS) throw new Error("Ukuran bukti terlalu besar. Maksimal sekitar 4 MB.");
     return { orderId, fileName: fileName || "bukti.jpg", mime: mime === "image/jpg" ? "image/jpeg" : mime, data: payload };
   })
-  .handler(async ({ context, data }) => {
+  .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     await expireStale(sql);
     const rows = await sql<OrderRow>`
-      select * from orders where id = ${data.orderId} and user_id = ${context.userId} limit 1
+      select * from orders where id = ${data.orderId} limit 1
     `;
     const order = rows[0];
     if (!order) throw new Error("Pesanan tidak ditemukan.");
@@ -839,7 +878,7 @@ export const uploadPaymentProof = createServerFn({ method: "POST" })
     }
     await sql`
       insert into payment_proofs (order_id, user_id, file_name, mime, data, uploaded_at)
-      values (${order.id}, ${context.userId}, ${data.fileName}, ${data.mime}, ${data.data}, now())
+      values (${order.id}, ${order.user_id}, ${data.fileName}, ${data.mime}, ${data.data}, now())
       on conflict (order_id) do update set
         file_name = excluded.file_name,
         mime = excluded.mime,
@@ -849,10 +888,10 @@ export const uploadPaymentProof = createServerFn({ method: "POST" })
     await sql`
       update orders
       set status = 'submitted', payment_type = 'qris'
-      where id = ${order.id} and user_id = ${context.userId} and status in ('pending', 'submitted')
+      where id = ${order.id} and status in ('pending', 'submitted')
     `;
     const updated = await sql<OrderRow>`
-      select * from orders where id = ${order.id} and user_id = ${context.userId} limit 1
+      select * from orders where id = ${order.id} limit 1
     `;
     return { order: await mapOrderFull(sql, updated[0] ?? order) };
   });
@@ -992,127 +1031,28 @@ async function ensureBuyerProfiles(sql: Sql) {
 async function loadBuyers(sql: Sql): Promise<AdminBuyer[]> {
   await ensureBuyerProfiles(sql);
   try {
-    const rows = await sql<{ id: string; email: string; whatsapp: string; created_at: string; referral_code: string | null }>`
-      select
-        u.id,
-        u.email,
-        coalesce(p.whatsapp, '') as whatsapp,
-        u."createdAt" as created_at,
-        coalesce(p.referral_code, '') as referral_code
-      from "user" u
-      left join buyer_profiles p on p.user_id = u.id
-      order by u."createdAt" desc
+    const rows = await sql<{
+      user_id: string;
+      email: string;
+      whatsapp: string;
+      created_at: string;
+      referral_code: string | null;
+    }>`
+      select user_id, email, whatsapp, created_at, referral_code
+      from buyer_profiles
+      order by created_at desc
     `;
     return rows.map((row) => ({
-      id: row.id,
+      id: row.user_id,
       email: row.email,
       whatsapp: row.whatsapp,
       createdAt: String(row.created_at),
       referralCode: String(row.referral_code || ""),
     }));
   } catch {
-    try {
-      const rows = await sql<{ user_id: string; email: string; whatsapp: string; created_at: string; referral_code: string | null }>`
-        select user_id, email, whatsapp, created_at, referral_code from buyer_profiles order by created_at desc
-      `;
-      return rows.map((row) => ({
-        id: row.user_id,
-        email: row.email,
-        whatsapp: row.whatsapp,
-        createdAt: String(row.created_at),
-        referralCode: String(row.referral_code || ""),
-      }));
-    } catch {
-      return [];
-    }
+    return [];
   }
 }
-
-export const completeBuyerProfile = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator((input: unknown) => {
-    const data = input as { whatsapp?: string; referral?: string };
-    const whatsapp = String(data.whatsapp ?? "").trim();
-    if (!isValidWhatsapp(whatsapp)) throw new Error("Nomor WhatsApp Indonesia tidak valid.");
-    const referral = String(data.referral ?? "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "")
-      .slice(0, 24);
-    return { whatsapp: normalizeWhatsapp(whatsapp), referral };
-  })
-  .handler(async ({ context, data }) => {
-    try {
-      const { getSql } = await import("@/lib/db");
-      const sql = await getSql();
-      await ensureBuyerProfiles(sql);
-      let email = "";
-      try {
-        const users = await sql<{ email: string }>`
-          select email from "user" where id = ${context.userId} limit 1
-        `;
-        email = String(users[0]?.email ?? "");
-      } catch {
-        email = "";
-      }
-      let referral = data.referral;
-      if (referral) {
-        try {
-          const agents = await sql<{ username: string; referral_code: string | null }>`
-            select username, referral_code from staff
-            where role = 'agent'
-              and (lower(username) = ${referral} or lower(coalesce(referral_code, '')) = ${referral})
-            limit 1
-          `;
-          if (!agents[0]) throw new Error("Kode referal tidak valid.");
-          referral = String(agents[0].referral_code || agents[0].username).toLowerCase();
-        } catch (e: unknown) {
-          if (e instanceof Error && e.message === "Kode referal tidak valid.") throw e;
-          throw new Error("Kode referal tidak valid.");
-        }
-      }
-      const existing = await sql<{ user_id: string; referral_code: string | null }>`
-        select user_id, referral_code from buyer_profiles where user_id = ${context.userId} limit 1
-      `;
-      const keepReferral = String(existing[0]?.referral_code || referral || "") || null;
-      if (existing[0]) {
-        await sql`
-          update buyer_profiles
-          set email = ${email},
-              whatsapp = ${data.whatsapp},
-              referral_code = ${keepReferral}
-          where user_id = ${context.userId}
-        `;
-      } else {
-        await sql`
-          insert into buyer_profiles (user_id, email, whatsapp, referral_code)
-          values (${context.userId}, ${email}, ${data.whatsapp}, ${referral || null})
-        `;
-      }
-      return { ok: true as const, whatsapp: data.whatsapp, email, referralCode: keepReferral || referral };
-    } catch (e: unknown) {
-      throw new Error(e instanceof Error ? e.message : "Gagal menyimpan profil pembeli.");
-    }
-  });
-
-export const getBuyerProfile = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }) => {
-    try {
-      const { getSql } = await import("@/lib/db");
-      const sql = await getSql();
-      await ensureBuyerProfiles(sql);
-      const rows = await sql<{ email: string; whatsapp: string; referral_code: string | null }>`
-        select email, whatsapp, referral_code from buyer_profiles where user_id = ${context.userId} limit 1
-      `;
-      return rows[0]
-        ? { email: rows[0].email, whatsapp: rows[0].whatsapp, referralCode: String(rows[0].referral_code || "") }
-        : null;
-    } catch {
-      return null;
-    }
-  });
-
 async function ensureStaffSeed(
   sql: Sql,
   hashPassword: (password: string) => string,
@@ -1523,7 +1463,6 @@ export const adminConfirmOrder = createServerFn({ method: "POST" })
   });
 
 export const getTicketByCode = createServerFn({ method: "GET" })
-  .middleware([authMiddleware])
   .validator((input: unknown) => {
     const code = String((input as { code?: string }).code ?? "")
       .trim()
@@ -1531,11 +1470,11 @@ export const getTicketByCode = createServerFn({ method: "GET" })
     if (!code) throw new Error("Tiket tidak ditemukan.");
     return { code };
   })
-  .handler(async ({ context, data }) => {
+  .handler(async ({ data }) => {
     const { getSql } = await import("@/lib/db");
     const sql = await getSql();
     const rows = await sql<TicketRow>`
-      select * from tickets where code = ${data.code} and user_id = ${context.userId} limit 1
+      select * from tickets where code = ${data.code} limit 1
     `;
     const ticket = rows[0];
     if (!ticket) throw new Error("Tiket tidak ditemukan.");

@@ -83,7 +83,7 @@ function AdminPengguna() {
       <section className="rounded-xl border border-border bg-card p-6">
         <h2 className="font-display text-2xl italic">Buat akun staf</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Akun yang dibuat admin: crew, agent, atau admin. Terpisah dari pembeli yang daftar sendiri.
+          Akun yang dibuat admin: crew, agent, atau admin. Pembeli tidak perlu membuat akun.
         </p>
         <form
           className="mt-6 grid gap-4"
@@ -140,10 +140,10 @@ function AdminPengguna() {
         <section>
           <h2 className="font-display text-2xl italic">QR agent {createdAgent}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Scan QR ini membuka form daftar dengan kode referal terisi otomatis.
+            Scan QR ini membuka checkout dengan kode referal terisi otomatis.
           </p>
           <div className="mt-4">
-            <AgentLinkCard code={createdAgent} title={`QR daftar ${createdAgent}`} />
+            <AgentLinkCard code={createdAgent} title={`QR checkout ${createdAgent}`} />
           </div>
         </section>
       ) : null}
@@ -223,19 +223,19 @@ function AdminPengguna() {
         </div>
         {openQr ? (
           <div className="mt-4">
-            <AgentLinkCard code={openQr} title={`QR daftar ${openQr}`} />
+            <AgentLinkCard code={openQr} title={`QR checkout ${openQr}`} />
           </div>
         ) : null}
       </section>
 
       <section>
-        <h2 className="font-display text-2xl italic">Akun pembeli</h2>
+        <h2 className="font-display text-2xl italic">Pembeli</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          User yang daftar sendiri lewat form. Kode referal diisi saat pendaftaran.
+          Data dari checkout (tanpa akun). Kode referal diisi saat beli tiket.
         </p>
         <div className="mt-4 overflow-hidden rounded-xl border border-border">
           {(dash.buyers ?? []).length === 0 ? (
-            <p className="p-5 text-sm text-muted-foreground">Belum ada pembeli yang daftar.</p>
+            <p className="p-5 text-sm text-muted-foreground">Belum ada pembeli.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -244,7 +244,7 @@ function AdminPengguna() {
                     <th className="px-4 py-3 font-medium">Email</th>
                     <th className="px-4 py-3 font-medium">WhatsApp</th>
                     <th className="px-4 py-3 font-medium">Referal</th>
-                    <th className="px-4 py-3 font-medium">Terdaftar</th>
+                    <th className="px-4 py-3 font-medium">Checkout</th>
                   </tr>
                 </thead>
                 <tbody>

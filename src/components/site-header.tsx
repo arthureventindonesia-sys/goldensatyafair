@@ -1,8 +1,6 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 import { useState } from "react";
-import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { MainLogo } from "@/components/brand-logos";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -40,7 +38,6 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <AuthSlot />
           <Button
             variant="ghost"
             size="icon"
@@ -68,26 +65,5 @@ export function SiteHeader() {
         </SheetContent>
       </Sheet>
     </header>
-  );
-}
-
-function AuthSlot() {
-  const { isPending } = useCurrentUserState();
-  if (isPending) {
-    return <div className="h-8 w-24 animate-pulse rounded-full bg-secondary" />;
-  }
-  return (
-    <>
-      <SignedOut>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/login" search={{ redirect: "/checkout" }}>
-            Masuk / Daftar
-          </Link>
-        </Button>
-      </SignedOut>
-      <SignedIn>
-        <UserButton />
-      </SignedIn>
-    </>
   );
 }
