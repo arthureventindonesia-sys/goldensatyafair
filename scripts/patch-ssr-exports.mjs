@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 /**
- * Nitro + Vite 8.2 / Rolldown splits the SSR service into ssr.mjs + ssr2.mjs
- * with a circular import and an undeclared `ssr_exports` binding.
- * Every request then 500s: SyntaxError: Export 'ssr_exports' is not defined.
- * See TanStack/router#8031. Run after `vite build`.
+ * Nitro + Vite 8.2 / Rolldown 1.2.2–1.2.6 splits the SSR service into
+ * ssr.mjs + ssr2.mjs with a circular import and an undeclared `ssr_exports`
+ * binding. Every request then 500s:
+ *   SyntaxError: Export 'ssr_exports' is not defined
+ * See TanStack/router#8031. Run after `vite build` and on service start.
  */
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const roots = [".output/server", ".vercel/output/functions/__server.func"];
+const here = dirname(fileURLToPath(import.meta.url));
+const roots = [
+  join(process.cwd(), ".output/server"),
+  join(here, "../.output/server"),
+  "/var/www/goldensatyafair/.output/server",
+  join(process.cwd(), ".vercel/output/functions/__server.func"),
+];
 
 const EXPORT_ALL = `var __exportAll$1 = (all, no_symbols) => {
 	const target = {};
@@ -34,7 +42,10 @@ function walk(dir, acc = []) {
 }
 
 let patched = 0;
+const seen = new Set();
 for (const root of roots) {
+  if (!existsSync(root) || seen.has(root)) continue;
+  seen.add(root);
   for (const file of walk(root)) {
     const base = file.split("/").pop() || "";
     if (base !== "ssr.mjs" && base !== "ssr2.mjs") continue;
@@ -49,12 +60,12 @@ for (const root of roots) {
       changed = true;
     }
 
-    if (
-      src.includes("ssr_exports as") &&
-      src.includes("server_default as default") &&
-      !src.includes("var ssr_exports")
-    ) {
-      src = src.replace(/export \{/, `var ssr_exports = { default: server_default, t: server_exports };\nexport {`);
+    if (/\bssr_exports as\b/.test(src) && !/\bvar ssr_exports\b/.test(src) && !/\bconst ssr_exports\b/.test(src)) {
+      const ns =
+        /\bserver_default\b/.test(src) && /\bserver_exports\b/.test(src)
+          ? "{ default: server_default, t: server_exports }"
+          : "{}";
+      src = src.replace(/export \{/, `var ssr_exports = ${ns};\nexport {`);
       changed = true;
     }
 
