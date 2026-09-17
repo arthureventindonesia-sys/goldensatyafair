@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/login-CUiR89VX.js","assets/react-SIfiwpqq.js","assets/preload-helper-JlbcKNSx.js","assets/client-DRhaju3Z.js"])))=>i.map(i=>d[i]);
+import{t as e}from"./preload-helper-JlbcKNSx.js";import{n as t,t as n}from"./lazyRouteComponent-BZG3QJlM.js";var r=t(`/login`)({validateSearch:e=>({redirect:typeof e.redirect==`string`&&e.redirect.startsWith(`/`)&&!e.redirect.startsWith(`//`)?e.redirect:`/`}),component:n(()=>e(()=>import(`./login-CUiR89VX.js`),__vite__mapDeps([0,1,2,3])),`component`)});export{r as t};

@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Golden Satya Fair",
+      "hasCanvas": false,
+      "bodyTextLen": 1431,
+      "bodyTextHash": "ad1da377ba5542beb821b70a819d72f3eaaf427eb5483a0670016942e48a51a6",
+      "bodyTextPrefix": "GOLDEN SATYA FAIR 2026 Lineup Tiket Info Tiket saya OKTOBER 2026",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Golden Satya Fair",
+      "hasCanvas": false,
+      "bodyTextLen": 1392,
+      "bodyTextHash": "782a23b48714164cd29190cbf7a47cfaa869a2dfa29cdb125cf3d4dc486a6957",
+      "bodyTextPrefix": "GOLDEN SATYA OKTOBER 2026 · BUMIAYU, BREBES GOLDEN SATYA Fair 20",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": false,
+  "baselineReasons": []
+}

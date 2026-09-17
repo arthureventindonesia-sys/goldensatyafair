@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/login",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Konser Tulus Bumiayu",
+      "hasCanvas": false,
+      "bodyTextLen": 356,
+      "bodyTextHash": "8608702e4a8b962ee7eabdfb3c011c1a18e3badcb5a0d36e0d72f951b1c4fa21",
+      "bodyTextPrefix": "TULUS BUMIAYU 2026 Lineup Tiket Info Tiket saya Masuk TULUS · 20",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Konser Tulus Bumiayu",
+      "hasCanvas": false,
+      "bodyTextLen": 314,
+      "bodyTextHash": "18c64893f6700e790a9bc2fc9ab8e48789efce5b32a238e42b9870d28488cb57",
+      "bodyTextPrefix": "TULUS Masuk TULUS · 2026 Masuk dengan Google Masuk hanya lewat G",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/login.json"
+}
