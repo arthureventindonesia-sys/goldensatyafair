@@ -87,11 +87,7 @@ fi
 chown -R gsf:gsf "${APP_DIR}"
 cd "${APP_DIR}"
 sudo -u gsf npm ci --omit=dev=false
-set -a
-# shellcheck disable=SC1090
-source "${ENV_FILE}"
-set +a
-sudo -u gsf env NITRO_PRESET=node-server NODE_ENV=production npm run build:vps
+sudo -u gsf bash -lc "set -a; source '${ENV_FILE}'; set +a; export NITRO_PRESET=node-server NODE_ENV=production; cd '${APP_DIR}'; npm run build:vps"
 
 install -m 644 "${APP_DIR}/deploy/vps/goldensatyafair.service" "${SERVICE_FILE}"
 sed "s/DOMAIN_HERE/${APP_DOMAIN}/g" "${APP_DIR}/deploy/vps/nginx.conf" > "${NGINX_FILE}"
