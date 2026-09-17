@@ -9,6 +9,7 @@ User=gsf
 Group=gsf
 WorkingDirectory=/var/www/goldensatyafair
 EnvironmentFile=/etc/goldensatyafair.env
+ExecStartPre=/usr/bin/node /var/www/goldensatyafair/scripts/migrate.mjs
 ExecStart=/usr/bin/node .output/server/index.mjs
 Restart=always
 RestartSec=4
